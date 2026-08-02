@@ -156,6 +156,8 @@ const DocumentRecord = mongoose.model('DocumentRecord', documentSchema);
 const Approval = mongoose.model('Approval', approvalSchema);
 const FileRecord = mongoose.model('FileRecord', fileSchema);
 
+const makeBinary = (label) => Buffer.from(label);
+
 async function resetCollections() {
   await mongoose.connection.dropDatabase();
 }
@@ -185,13 +187,33 @@ async function seed() {
       role: 'manager',
       isActive: true,
     },
+    {
+      username: 'operator1',
+      email: 'operator1@example.com',
+      passwordHash: await bcrypt.hash('123456', 10),
+      fullName: 'Operator One',
+      role: 'operator',
+      isActive: true,
+    },
+    {
+      username: 'viewer1',
+      email: 'viewer1@example.com',
+      passwordHash: await bcrypt.hash('123456', 10),
+      fullName: 'Viewer One',
+      role: 'viewer',
+      isActive: true,
+    },
   ]);
 
   const vehicles = await Vehicle.insertMany([
-    { plateNumber: '99F00379', brand: 'Wonn', model: '8T', status: 'active', mileage: 155385 },
-    { plateNumber: '99F00927', brand: 'Wonn', model: '10T', status: 'active', mileage: 232296 },
-    { plateNumber: '29G00090', brand: 'Wonn', model: '8T', status: 'active', mileage: 232296 },
-    { plateNumber: '99E01738', brand: 'Wonn', model: '6T', status: 'active', mileage: 198000 },
+    { plateNumber: '99H05715', brand: 'Wonn', model: '8T', status: 'active', mileage: 155385 },
+    { plateNumber: '99H00771', brand: 'Wonn', model: '10T', status: 'active', mileage: 232296 },
+    { plateNumber: '99H00826', brand: 'Wonn', model: '8T', status: 'active', mileage: 182296 },
+    { plateNumber: '99H05791', brand: 'Wonn', model: '5T', status: 'active', mileage: 198000 },
+    { plateNumber: '99H08017', brand: 'Wonn', model: '10T', status: 'maintenance', mileage: 240100 },
+    { plateNumber: '29G00880', brand: 'Wonn', model: '10T', status: 'active', mileage: 226500 },
+    { plateNumber: '99H08136', brand: 'Wonn', model: '5T', status: 'inactive', mileage: 210450 },
+    { plateNumber: '99H08513', brand: 'Wonn', model: '8T', status: 'active', mileage: 173210 },
   ]);
 
   const drivers = await Driver.insertMany([
@@ -199,6 +221,8 @@ async function seed() {
     { fullName: 'Tran Van Do', licenseNumber: 'DL-0002', phone: '0901111111', status: 'active' },
     { fullName: 'Nguyen Van Nhat', licenseNumber: 'DL-0003', phone: '0902222222', status: 'active' },
     { fullName: 'Dinh Quang Chi', licenseNumber: 'DL-0004', phone: '0903333333', status: 'active' },
+    { fullName: 'Luong Van Thanh', licenseNumber: 'DL-0005', phone: '0904444444', status: 'suspended' },
+    { fullName: 'Hoang Minh Cuong', licenseNumber: 'DL-0006', phone: '0905555555', status: 'active' },
   ]);
 
   const customers = await Customer.insertMany([
@@ -206,6 +230,7 @@ async function seed() {
     { name: 'Everton' },
     { name: 'MU Vo Doi' },
     { name: 'Samsung Bac Ninh' },
+    { name: 'Manchester City' },
   ]);
 
   const trips = await Trip.insertMany([
@@ -298,6 +323,28 @@ async function seed() {
       status: 'completed',
       totalCost: 0,
     },
+    {
+      tripCode: 'TRIP-20260623-2084',
+      refCode: 'MUVLTP26060079',
+      sales: 'ADMIN',
+      cutoffMonth: 6,
+      month: 6,
+      deliveryDate: today,
+      origin: 'Ha Noi',
+      destination: 'Vinh Phuc',
+      vehicleId: vehicles[5]._id,
+      vehiclePlate: vehicles[5].plateNumber,
+      driverId: drivers[5]._id,
+      driverName: drivers[5].fullName,
+      customerId: customers[4]._id,
+      customerName: customers[4].name,
+      vendor: 'Wonn',
+      truckType: '10T',
+      podStatus: 'pending',
+      costStatus: 'rejected',
+      status: 'cancelled',
+      totalCost: 3600000,
+    },
   ]);
 
   await Cost.insertMany([
@@ -338,6 +385,43 @@ async function seed() {
       totalCost: 0,
       status: 'pending',
     },
+    {
+      tripCode: trips[2].tripCode,
+      startKm: 182296,
+      endKm: 183000,
+      totalKm: 704,
+      fuelLiters: 62,
+      fuelUnitPrice: 24000,
+      fuelInvoiceAmount: 1488000,
+      fuelTotal: 1488000,
+      maintenanceCost: 120000,
+      vetcCost: 270000,
+      loadingFee: 50000,
+      parkingFee: 0,
+      turnaroundAllowance: 0,
+      otherFee: 80000,
+      totalCost: 2008000,
+      status: 'rejected',
+      note: 'Need review',
+    },
+    {
+      tripCode: trips[3].tripCode,
+      startKm: 198000,
+      endKm: 198620,
+      totalKm: 620,
+      fuelLiters: 58,
+      fuelUnitPrice: 24000,
+      fuelInvoiceAmount: 1392000,
+      fuelTotal: 1392000,
+      maintenanceCost: 0,
+      vetcCost: 250000,
+      loadingFee: 0,
+      parkingFee: 30000,
+      turnaroundAllowance: 0,
+      otherFee: 0,
+      totalCost: 1672000,
+      status: 'approved',
+    },
   ]);
 
   await Maintenance.insertMany([
@@ -366,20 +450,106 @@ async function seed() {
       garage: 'Garage Huu Nghi',
       cost: 450000,
     },
+    {
+      vehiclePlate: vehicles[5].plateNumber,
+      maintenanceItem: 'Thay lốp trước + cân chỉnh',
+      repairDate: today,
+      vehicleKm: 226500,
+      garage: 'Garage Tân Việt',
+      cost: 2100000,
+      note: 'Test record for maintenance screen',
+    },
   ]);
+
+  const fileRecords = await FileRecord.insertMany([
+    {
+      fileName: 'doc-registration-001.pdf',
+      tripCode: trips[0].tripCode,
+      type: 'registration',
+      size: makeBinary('registration 99H05715').length,
+      data: makeBinary('registration 99H05715'),
+      mimeType: 'application/pdf',
+      entityId: String(vehicles[0]._id),
+    },
+    {
+      fileName: 'doc-insurance-001.pdf',
+      tripCode: trips[1].tripCode,
+      type: 'insurance',
+      size: makeBinary('insurance 99H00771').length,
+      data: makeBinary('insurance 99H00771'),
+      mimeType: 'application/pdf',
+      entityId: String(vehicles[1]._id),
+    },
+    {
+      fileName: 'doc-inspection-001.pdf',
+      tripCode: trips[2].tripCode,
+      type: 'inspection',
+      size: makeBinary('inspection 99H00826').length,
+      data: makeBinary('inspection 99H00826'),
+      mimeType: 'application/pdf',
+      entityId: String(vehicles[2]._id),
+    },
+    {
+      fileName: 'doc-permit-001.pdf',
+      tripCode: trips[3].tripCode,
+      type: 'permit',
+      size: makeBinary('permit 29G00880').length,
+      data: makeBinary('permit 29G00880'),
+      mimeType: 'application/pdf',
+      entityId: String(vehicles[5]._id),
+    },
+    {
+      fileName: 'doc-registration-002.pdf',
+      tripCode: trips[4].tripCode,
+      type: 'registration',
+      size: makeBinary('registration 99H08513').length,
+      data: makeBinary('registration 99H08513'),
+      mimeType: 'application/pdf',
+      entityId: String(vehicles[7]._id),
+    },
+    {
+      fileName: 'pod-TRIP-20260623-2083.jpg',
+      tripCode: trips[0].tripCode,
+      type: 'POD',
+      size: makeBinary('sample pod file').length,
+      data: makeBinary('sample pod file'),
+      mimeType: 'image/jpeg',
+      entityId: String(trips[0]._id),
+    },
+  ]);
+
+  const fileByName = new Map(fileRecords.map((record) => [record.fileName, record]));
 
   await DocumentRecord.insertMany([
     {
       vehiclePlate: vehicles[0].plateNumber,
       type: 'registration',
       expiryDate: new Date('2027-03-15T00:00:00.000Z'),
-      fileId: 'doc-registration-001',
+      fileId: String(fileByName.get('doc-registration-001.pdf')?._id),
     },
     {
       vehiclePlate: vehicles[0].plateNumber,
       type: 'insurance',
       expiryDate: new Date('2026-12-20T00:00:00.000Z'),
-      fileId: 'doc-insurance-001',
+      fileId: String(fileByName.get('doc-insurance-001.pdf')?._id),
+    },
+    {
+      vehiclePlate: vehicles[1].plateNumber,
+      type: 'inspection',
+      expiryDate: new Date('2026-09-15T00:00:00.000Z'),
+      fileId: String(fileByName.get('doc-inspection-001.pdf')?._id),
+    },
+    {
+      vehiclePlate: vehicles[5].plateNumber,
+      type: 'permit',
+      expiryDate: new Date('2027-01-20T00:00:00.000Z'),
+      fileId: String(fileByName.get('doc-permit-001.pdf')?._id),
+    },
+    {
+      vehiclePlate: vehicles[7].plateNumber,
+      type: 'registration',
+      expiryDate: new Date('2026-08-25T00:00:00.000Z'),
+      fileId: String(fileByName.get('doc-registration-002.pdf')?._id),
     },
   ]);
 
@@ -392,26 +562,29 @@ async function seed() {
       comment: 'Da doi chieu hoa don dau',
       approvedAt: new Date(),
     },
-  ]);
-
-  await FileRecord.insertMany([
     {
-      fileName: 'pod.jpg',
-      tripCode: trips[0].tripCode,
-      type: 'POD',
-      size: 245120,
-      data: Buffer.from('sample pod file'),
-      mimeType: 'image/jpeg',
-      entityId: String(trips[0]._id),
+      targetType: 'driver',
+      targetId: String(drivers[4]._id),
+      status: 'pending',
+      approver: 'manager1',
+      comment: 'Can xac minh lai thong tin',
+    },
+    {
+      targetType: 'document',
+      targetId: String(fileByName.get('doc-permit-001.pdf')?._id),
+      status: 'rejected',
+      approver: 'admin',
+      comment: 'Thieu anh ban goc',
     },
   ]);
 
   console.log('Seed completed successfully.');
-  console.log(`Users: 2`);
+  console.log(`Users: 4`);
   console.log(`Vehicles: ${vehicles.length}`);
   console.log(`Drivers: ${drivers.length}`);
   console.log(`Customers: ${customers.length}`);
   console.log(`Trips: ${trips.length}`);
+  console.log(`Files: ${fileRecords.length}`);
 
   await mongoose.disconnect();
 }

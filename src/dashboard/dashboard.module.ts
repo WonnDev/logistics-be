@@ -1,4 +1,4 @@
-import { Controller, Get, Injectable, Module } from '@nestjs/common';
+import { Controller, Get, Injectable, Logger, Module } from '@nestjs/common';
 import { InjectModel, MongooseModule } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Trip, TripSchema } from '../trips/trips.module';
@@ -13,6 +13,8 @@ import { User, UserSchema } from '../users/users.module';
 
 @Injectable()
 export class DashboardService {
+  private readonly logger = new Logger(DashboardService.name);
+
   constructor(
     @InjectModel(User.name) private readonly usersModel: Model<User>,
     @InjectModel(Vehicle.name) private readonly vehiclesModel: Model<Vehicle>,
@@ -26,6 +28,7 @@ export class DashboardService {
   ) {}
 
   async summary() {
+    this.logger.log('Building dashboard summary');
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
@@ -40,7 +43,7 @@ export class DashboardService {
       this.maintenanceModel.aggregate([{ $group: { _id: null, total: { $sum: '$cost' } } }]).exec(),
     ]);
 
-    return {
+    const summary = {
       totalTrips,
       pendingCosts,
       approvedCosts,
@@ -48,6 +51,12 @@ export class DashboardService {
       todayTrips,
       totalMaintenanceCost: totalMaintenanceAgg[0]?.total ?? 0,
     };
+
+    this.logger.log(
+      `Dashboard summary ready: trips=${summary.totalTrips}, pendingCosts=${summary.pendingCosts}, approvedCosts=${summary.approvedCosts}, activeVehicles=${summary.activeVehicles}, todayTrips=${summary.todayTrips}`,
+    );
+
+    return summary;
   }
 }
 

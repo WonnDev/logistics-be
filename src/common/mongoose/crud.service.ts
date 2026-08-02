@@ -13,11 +13,13 @@ export abstract class CrudService<TDocument> {
   }
 
   async findAll() {
+    this.logger.log(`Listing ${this.entityName}s`);
     return this.model.find().sort({ createdAt: -1 }).exec();
   }
 
   async findOne(id: string) {
     this.assertValidObjectId(id);
+    this.logger.log(`Fetching ${this.entityName} ${id}`);
     const record = await this.model.findById(id).exec();
     if (!record) {
       throw new NotFoundException(`${this.entityName} not found`);
@@ -30,6 +32,7 @@ export abstract class CrudService<TDocument> {
       this.logger.log(`Creating ${this.entityName}`);
       return await this.model.create(payload);
     } catch (error: any) {
+      this.logger.error(`Failed to create ${this.entityName}`, error?.stack ?? error?.message ?? error);
       this.handleMongoError(error);
       throw error;
     }
@@ -47,6 +50,7 @@ export abstract class CrudService<TDocument> {
       }
       return updated;
     } catch (error: any) {
+      this.logger.error(`Failed to update ${this.entityName} ${id}`, error?.stack ?? error?.message ?? error);
       this.handleMongoError(error);
       throw error;
     }

@@ -33,6 +33,7 @@ import { Driver } from '../drivers/drivers.module';
 import { DriversModule } from '../drivers/drivers.module';
 import { Vehicle } from '../vehicles/vehicles.module';
 import { VehiclesModule } from '../vehicles/vehicles.module';
+import { Logger } from '@nestjs/common';
 
 export enum TripStatus {
   Draft = 'draft',
@@ -247,6 +248,8 @@ export class UpdateTripDto extends PartialType(CreateTripDto) {}
 
 @Injectable()
 export class TripsService extends CrudService<TripDocument> {
+  private readonly tripLogger = new Logger(TripsService.name);
+
   constructor(
     @InjectModel(Trip.name) model: Model<TripDocument>,
     private readonly importExportService: ImportExportService,
@@ -259,6 +262,7 @@ export class TripsService extends CrudService<TripDocument> {
 
   async createTrip(dto: CreateTripDto) {
     try {
+      this.tripLogger.log(`Creating trip ${dto.tripCode}`);
       return await this.create({
         tripCode: dto.tripCode,
         refCode: dto.refCode,
@@ -286,13 +290,16 @@ export class TripsService extends CrudService<TripDocument> {
       } as Partial<TripDocument>);
     } catch (error: any) {
       if (error?.code === 11000) {
+        this.tripLogger.warn(`Trip code already exists: ${dto.tripCode}`);
         throw new ConflictException('Trip code already exists');
       }
+      this.tripLogger.error(`Failed to create trip ${dto.tripCode}`, error?.stack ?? error?.message ?? error);
       throw error;
     }
   }
 
   async updateTrip(id: string, dto: UpdateTripDto) {
+    this.tripLogger.log(`Updating trip ${id}`);
     return this.update(id, {
       tripCode: dto.tripCode,
       refCode: dto.refCode,
@@ -321,6 +328,7 @@ export class TripsService extends CrudService<TripDocument> {
   }
 
   async importTrips(buffer: Buffer): Promise<TripImportResult> {
+    this.tripLogger.log(`Importing trips from Excel buffer (${buffer.length} bytes)`);
     const rows = await this.importExportService.parseTrips(buffer);
     let inserted = 0;
     let updated = 0;
@@ -370,15 +378,18 @@ export class TripsService extends CrudService<TripDocument> {
 
         const existing = await this.model.findOne({ tripCode: row.tripCode }).exec();
         if (existing) {
+          this.tripLogger.log(`Updating imported trip ${row.tripCode}`);
           await this.model
             .findByIdAndUpdate(existing._id, payload, { new: true, runValidators: true })
             .exec();
           updated += 1;
         } else {
+          this.tripLogger.log(`Creating imported trip ${row.tripCode}`);
           await this.createTrip(payload as unknown as CreateTripDto);
           inserted += 1;
         }
       } catch (error: any) {
+        this.tripLogger.warn(`Failed to import trip row ${index + 2}: ${error?.message ?? 'Import failed'}`);
         errors.push({
           row: index + 2,
           message: error?.message ?? 'Import failed',
@@ -386,6 +397,7 @@ export class TripsService extends CrudService<TripDocument> {
       }
     }
 
+    this.tripLogger.log(`Trip import completed: inserted=${inserted}, updated=${updated}, failed=${errors.length}`);
     return {
       inserted,
       updated,
@@ -395,6 +407,7 @@ export class TripsService extends CrudService<TripDocument> {
   }
 
   async exportTrips() {
+    this.tripLogger.log('Exporting trips to Excel');
     const trips = await this.findAll();
     return this.importExportService.exportTrips(trips as Array<Record<string, any>>);
   }
@@ -460,6 +473,7 @@ export class TripsController {
     if (file.size > 2 * 1024 * 1024) {
       throw new BadRequestException('File size exceeds 2MB limit');
     }
+    this.tripsService['tripLogger'].log(`Received trips import file ${file.originalname} (${file.size} bytes)`);
     return this.tripsService.importTrips(file.buffer);
   }
 
@@ -467,6 +481,8 @@ export class TripsController {
   @ApiOperation({ summary: 'Export trips to Excel' })
   async exportTrips(@Res({ passthrough: true }) response: Response) {
     const buffer = await this.tripsService.exportTrips();
+    const exportSize = (buffer as any)?.length ?? (buffer as any)?.byteLength ?? 0;
+    this.tripsService['tripLogger'].log(`Trip export ready (${exportSize} bytes)`);
     response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     response.setHeader('Content-Disposition', 'attachment; filename="trips.xlsx"');
     return buffer as unknown as Buffer;
