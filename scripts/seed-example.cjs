@@ -132,6 +132,22 @@ const approvalSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+const notificationSchema = new mongoose.Schema(
+  {
+    type: { type: String, required: true, enum: ['document', 'cost', 'maintenance', 'approval', 'system'] },
+    read: { type: Boolean, default: false },
+    visibleToRoles: { type: [String], default: [] },
+    visibleToUsers: { type: [String], default: [] },
+    readByUsers: { type: [String], default: [] },
+    title: { type: String, required: true, trim: true },
+    desc: { type: String, required: true, trim: true },
+    time: { type: String, required: true, trim: true },
+    iconBg: { type: String, required: true, trim: true },
+    iconColor: { type: String, required: true, trim: true },
+  },
+  { timestamps: true },
+);
+
 const fileSchema = new mongoose.Schema(
   {
     fileName: { type: String, required: true, trim: true },
@@ -154,6 +170,7 @@ const Cost = mongoose.model('Cost', costSchema);
 const Maintenance = mongoose.model('Maintenance', maintenanceSchema);
 const DocumentRecord = mongoose.model('DocumentRecord', documentSchema);
 const Approval = mongoose.model('Approval', approvalSchema);
+const Notification = mongoose.model('Notification', notificationSchema);
 const FileRecord = mongoose.model('FileRecord', fileSchema);
 
 const makeBinary = (label) => Buffer.from(label);
@@ -578,6 +595,105 @@ async function seed() {
     },
   ]);
 
+  await Notification.insertMany([
+    {
+      type: 'document',
+      read: false,
+      visibleToRoles: ['admin', 'viewer'],
+      visibleToUsers: ['admin', 'viewer1'],
+      readByUsers: [],
+      title: 'Xe 29G00880 — Đăng ký xe quá hạn',
+      desc: 'Quá hạn 25 ngày. Lái xe: Lưu Ngọc Tài — cần gia hạn ngay.',
+      time: '2 giờ trước',
+      iconBg: '#FFF1F2',
+      iconColor: '#DC2626',
+    },
+    {
+      type: 'cost',
+      read: false,
+      visibleToRoles: ['admin', 'manager'],
+      visibleToUsers: ['admin', 'manager1'],
+      readByUsers: [],
+      title: '2 chuyến chưa nhập chi phí hôm nay',
+      desc: 'TRIP-0132 (Manchester City), TRIP-0135 (Arsenal) — hạn chót: hôm nay.',
+      time: '2 giờ trước',
+      iconBg: '#FFF1F2',
+      iconColor: '#DC2626',
+    },
+    {
+      type: 'approval',
+      read: false,
+      visibleToRoles: ['admin', 'manager'],
+      visibleToUsers: ['admin', 'manager1'],
+      readByUsers: [],
+      title: '2 lái xe đang chờ phê duyệt',
+      desc: 'Nguyễn Văn Đại, Trần Văn Khái — tháng 11/2025 chưa duyệt chi phí.',
+      time: '3 giờ trước',
+      iconBg: '#FFFBEB',
+      iconColor: '#D97706',
+    },
+    {
+      type: 'system',
+      read: false,
+      visibleToRoles: ['admin', 'viewer', 'operator'],
+      visibleToUsers: ['admin', 'viewer1', 'operator1'],
+      readByUsers: [],
+      title: 'Đồng bộ Sheet hoàn tất',
+      desc: '1,046 bản ghi đã được đồng bộ từ Google Sheets lúc 08:00.',
+      time: '4 giờ trước',
+      iconBg: '#FFFBEB',
+      iconColor: '#D97706',
+    },
+    {
+      type: 'document',
+      read: true,
+      visibleToRoles: ['viewer'],
+      visibleToUsers: ['viewer1'],
+      readByUsers: ['viewer1'],
+      title: 'Xe 99H05791 — Bảo hiểm quá hạn 15 ngày',
+      desc: 'Quá hạn. Lái xe: Luân Văn Thanh — liên hệ bộ phận xe ngay.',
+      time: '1 ngày trước',
+      iconBg: '#FFF1F2',
+      iconColor: '#DC2626',
+    },
+    {
+      type: 'document',
+      read: true,
+      visibleToRoles: ['viewer'],
+      visibleToUsers: ['viewer1'],
+      readByUsers: ['viewer1'],
+      title: 'Xe 99H05715 — Đăng kiểm còn 11 ngày',
+      desc: 'Sắp hết hạn. Lái xe: Dương Tuấn Anh — lên lịch đăng kiểm.',
+      time: '1 ngày trước',
+      iconBg: '#FFFBEB',
+      iconColor: '#D97706',
+    },
+    {
+      type: 'maintenance',
+      read: true,
+      visibleToRoles: ['viewer'],
+      visibleToUsers: ['viewer1'],
+      readByUsers: ['viewer1'],
+      title: '2 bảo dưỡng chưa khớp hóa đơn',
+      desc: '99G07385: nổ hội + công thợ • 99H05424: dầu nhớt — cần xác nhận.',
+      time: '2 ngày trước',
+      iconBg: '#FFFBEB',
+      iconColor: '#D97706',
+    },
+    {
+      type: 'system',
+      read: false,
+      visibleToRoles: ['operator'],
+      visibleToUsers: ['operator1'],
+      readByUsers: [],
+      title: 'Xe điều phối cần xác nhận lịch xuất bến',
+      desc: 'Ca sáng 03/08 cần xác nhận trước 08:30 cho operator1.',
+      time: '30 phút trước',
+      iconBg: '#EFF6FF',
+      iconColor: '#2563EB',
+    },
+  ]);
+
   console.log('Seed completed successfully.');
   console.log(`Users: 4`);
   console.log(`Vehicles: ${vehicles.length}`);
@@ -585,6 +701,7 @@ async function seed() {
   console.log(`Customers: ${customers.length}`);
   console.log(`Trips: ${trips.length}`);
   console.log(`Files: ${fileRecords.length}`);
+  console.log('Notifications: 8');
 
   await mongoose.disconnect();
 }
