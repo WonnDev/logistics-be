@@ -16,7 +16,7 @@ export class LoginDto {
 
   @ApiProperty({ example: '123456' })
   @IsString()
-  @MinLength(8)
+  @MinLength(6)
   password!: string;
 }
 
@@ -33,16 +33,19 @@ export class AuthService {
   async login(dto: LoginDto) {
     const user = await this.usersService.findByUsername(dto.username);
     if (!user) {
+      this.logger.warn(`Login failed: user not found for ${dto.username}`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const passwordHash = user.passwordHash;
     if (!passwordHash) {
+      this.logger.warn(`Login failed: missing password hash for ${dto.username}`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const isValid = await bcrypt.compare(dto.password, passwordHash);
     if (!isValid) {
+      this.logger.warn(`Login failed: invalid password for ${dto.username}`);
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -53,7 +56,7 @@ export class AuthService {
       role: user.role,
     };
 
-    this.logger.log(`User ${user.username} logged in`);
+    this.logger.log(`User ${user.username} logged in with role ${user.role}`);
 
     return {
       accessToken: await this.jwtService.signAsync(payload, {

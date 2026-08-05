@@ -21,6 +21,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { Response } from 'express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Logger } from '@nestjs/common';
 
 const allowedMimeTypes = new Set([
   'application/pdf',
@@ -79,12 +80,16 @@ export class CreateFileDto {
 
 @Injectable()
 export class FilesService extends CrudService<FileRecordDocument> {
+  private readonly fileLogger = new Logger(FilesService.name);
+
   constructor(@InjectModel(FileRecord.name) model: Model<FileRecordDocument>) {
     super(model, 'File');
   }
 
   async uploadFile(file: Express.Multer.File, dto: CreateFileDto) {
+    this.fileLogger.log(`Uploading file ${dto.fileName ?? file.originalname} for trip ${dto.tripCode}`);
     if (!allowedMimeTypes.has(file.mimetype)) {
+      this.fileLogger.warn(`Rejected file upload due to mime type ${file.mimetype}`);
       throw new BadRequestException('Unsupported file type');
     }
 
@@ -104,6 +109,8 @@ export class FilesService extends CrudService<FileRecordDocument> {
 @ApiBearerAuth()
 @Controller('files')
 export class FilesController {
+  private readonly logger = new Logger(FilesController.name);
+
   constructor(private readonly filesService: FilesService) {}
 
   @Get()
@@ -115,6 +122,7 @@ export class FilesController {
   @Get(':id')
   @ApiOperation({ summary: 'Download file by id' })
   async download(@Param('id') id: string, @Res({ passthrough: true }) response: Response) {
+    this.logger.log(`Downloading file ${id}`);
     const file = await this.filesService.findOne(id);
     response.setHeader('Content-Type', file.mimeType ?? 'application/octet-stream');
     response.setHeader('Content-Disposition', `attachment; filename="${file.fileName}"`);
@@ -148,6 +156,7 @@ export class FilesController {
     if (file.size > 2 * 1024 * 1024) {
       throw new BadRequestException('File size exceeds 2MB limit');
     }
+    this.logger.log(`Received upload ${file.originalname} (${file.size} bytes) for trip ${dto.tripCode}`);
     return this.filesService.uploadFile(file, dto).then((record) => ({
       fileId: record.id,
       fileName: record.fileName,
@@ -159,6 +168,7 @@ export class FilesController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete file' })
   remove(@Param('id') id: string) {
+    this.logger.log(`Deleting file ${id}`);
     return this.filesService.remove(id);
   }
 }

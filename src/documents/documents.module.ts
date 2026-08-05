@@ -6,6 +6,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PartialType } from '@nestjs/mapped-types';
 import { CrudService } from '../common/mongoose/crud.service';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Logger } from '@nestjs/common';
 
 @Schema({ timestamps: true })
 export class DocumentRecord {
@@ -50,8 +51,25 @@ export class UpdateDocumentDto extends PartialType(CreateDocumentDto) {}
 
 @Injectable()
 export class DocumentsService extends CrudService<DocumentRecordDocument> {
+  private readonly documentLogger = new Logger(DocumentsService.name);
+
   constructor(@InjectModel(DocumentRecord.name) model: Model<DocumentRecordDocument>) {
     super(model, 'Document');
+  }
+
+  async createDocument(payload: Partial<DocumentRecordDocument>) {
+    this.documentLogger.log(`Creating document for plate ${(payload as any).vehiclePlate ?? 'unknown'}`);
+    return this.create(payload);
+  }
+
+  async updateDocument(id: string, payload: Partial<DocumentRecordDocument>) {
+    this.documentLogger.log(`Updating document ${id}`);
+    return this.update(id, payload);
+  }
+
+  async removeDocument(id: string) {
+    this.documentLogger.log(`Deleting document ${id}`);
+    return this.remove(id);
   }
 }
 
@@ -76,7 +94,7 @@ export class DocumentsController {
   @Post()
   @ApiOperation({ summary: 'Create document' })
   create(@Body() dto: CreateDocumentDto) {
-    return this.documentsService.create({
+    return this.documentsService.createDocument({
       vehiclePlate: dto.vehiclePlate,
       type: dto.type,
       expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
@@ -87,7 +105,7 @@ export class DocumentsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Update document' })
   update(@Param('id') id: string, @Body() dto: UpdateDocumentDto) {
-    return this.documentsService.update(id, {
+    return this.documentsService.updateDocument(id, {
       vehiclePlate: dto.vehiclePlate,
       type: dto.type,
       expiryDate: dto.expiryDate ? new Date(dto.expiryDate) : undefined,
@@ -98,7 +116,7 @@ export class DocumentsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Delete document' })
   remove(@Param('id') id: string) {
-    return this.documentsService.remove(id);
+    return this.documentsService.removeDocument(id);
   }
 }
 
