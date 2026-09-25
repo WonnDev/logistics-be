@@ -6,6 +6,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PartialType } from '@nestjs/mapped-types';
 import { CrudService } from '../common/mongoose/crud.service';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @Schema({ timestamps: true })
 export class Approval {
@@ -94,6 +95,7 @@ export class ApprovalsService extends CrudService<ApprovalDocument> {
 
 @ApiTags('approvals')
 @ApiBearerAuth()
+@Roles('admin')
 @Controller('approvals')
 export class ApprovalsController {
   constructor(private readonly approvalsService: ApprovalsService) {}

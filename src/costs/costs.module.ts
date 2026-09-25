@@ -6,6 +6,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PartialType } from '@nestjs/mapped-types';
 import { CrudService } from '../common/mongoose/crud.service';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 
 export enum CostStatus {
   Pending = 'pending',
@@ -155,6 +156,7 @@ export class CostsService extends CrudService<CostDocument> {
 
 @ApiTags('costs')
 @ApiBearerAuth()
+@Roles('admin')
 @Controller('costs')
 export class CostsController {
   constructor(private readonly costsService: CostsService) {}

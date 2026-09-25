@@ -34,14 +34,41 @@ export class DashboardService {
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
-    const [totalTrips, pendingCosts, approvedCosts, activeVehicles, todayTrips, totalMaintenanceAgg] = await Promise.all([
+    const [totalTrips, pendingCosts, approvedCosts, activeVehicles, todayTrips, totalMaintenanceAgg, monthlyTripAgg, subcontractorAgg, documents] = await Promise.all([
       this.tripsModel.countDocuments().exec(),
       this.costsModel.countDocuments({ status: 'pending' }).exec(),
       this.costsModel.countDocuments({ status: 'approved' }).exec(),
       this.vehiclesModel.countDocuments({ status: 'active' }).exec(),
       this.tripsModel.countDocuments({ deliveryDate: { $gte: todayStart, $lte: todayEnd } }).exec(),
       this.maintenanceModel.aggregate([{ $group: { _id: null, total: { $sum: '$cost' } } }]).exec(),
+      this.tripsModel.aggregate([
+        { $match: { deliveryDate: { $ne: null } } },
+        { $group: { _id: { $dateToString: { format: '%m/%Y', date: '$deliveryDate' } }, trips: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]).exec(),
+      this.tripsModel.aggregate([
+        { $match: { vendor: { $nin: [null, ''] } } },
+        { $group: { _id: '$vendor', cost: { $sum: '$totalCost' } } },
+        { $sort: { cost: -1 } },
+        { $limit: 5 },
+      ]).exec(),
+      this.documentsModel.find({ expiryDate: { $ne: null } }).select('vehiclePlate type expiryDate').lean().exec(),
     ]);
+
+    const now = new Date();
+    const expiryAlerts = documents
+      .map((document) => {
+        const expiryDate = new Date(document.expiryDate as Date);
+        const daysLeft = Math.ceil((expiryDate.getTime() - now.getTime()) / 86_400_000);
+        return {
+          plate: document.vehiclePlate,
+          doc: document.type ?? 'Document',
+          expiry: expiryDate.toISOString().slice(0, 10),
+          driver: '',
+          daysLeft,
+        };
+      })
+      .sort((left, right) => left.daysLeft - right.daysLeft);
 
     const summary = {
       totalTrips,
@@ -50,6 +77,9 @@ export class DashboardService {
       activeVehicles,
       todayTrips,
       totalMaintenanceCost: totalMaintenanceAgg[0]?.total ?? 0,
+      monthlyData: monthlyTripAgg.map((item) => ({ month: item._id, trips: item.trips })),
+      subconCosts: subcontractorAgg.map((item) => ({ name: item._id, cost: Math.round((item.cost ?? 0) / 1_000_000 * 10) / 10 })),
+      expiryAlerts,
     };
 
     this.logger.log(

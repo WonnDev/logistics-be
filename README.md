@@ -51,13 +51,13 @@ npm run seed:example
 Có thể override MongoDB và mật khẩu admin bằng biến môi trường:
 
 ```bash
-MONGODB_URI=mongodb://localhost:27017/logistic-be DEFAULT_ADMIN_PASSWORD=123456 npm run seed:example
+MONGODB_URI=mongodb://localhost:27017/logistic-be DEFAULT_ADMIN_PASSWORD=123123 npm run seed:example
 ```
 
 ## Login mặc định
 
 - Username: `admin`
-- Password: `123456`
+- Password: `123123`
 
 ## Lưu ý
 

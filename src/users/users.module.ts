@@ -7,6 +7,7 @@ import { PartialType } from '@nestjs/mapped-types';
 import * as bcrypt from 'bcryptjs';
 import { CrudService } from '../common/mongoose/crud.service';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 
 export enum UserRole {
   Admin = 'admin',
@@ -115,6 +116,7 @@ export class UsersService extends CrudService<UserDocument> {
 
 @ApiTags('users')
 @ApiBearerAuth()
+@Roles(UserRole.Admin)
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}

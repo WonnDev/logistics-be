@@ -6,6 +6,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PartialType } from '@nestjs/mapped-types';
 import { CrudService } from '../common/mongoose/crud.service';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 
 export enum VehicleStatus {
   Active = 'active',
@@ -68,6 +69,7 @@ export class VehiclesService extends CrudService<VehicleDocument> {
 
 @ApiTags('vehicles')
 @ApiBearerAuth()
+@Roles('admin')
 @Controller('vehicles')
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}

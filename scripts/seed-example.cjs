@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/logistic-be';
-const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || '123456';
+const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || '123123';
 
 const userSchema = new mongoose.Schema(
   {
@@ -67,6 +67,8 @@ const tripSchema = new mongoose.Schema(
     truckType: { type: String, trim: true },
     podStatus: { type: String, default: 'pending' },
     costStatus: { type: String, default: 'pending' },
+    oilInvoiceStatus: { type: String, enum: ['has', 'no'], default: 'no' },
+    paymentStatus: { type: String, enum: ['paid', 'unpaid'], default: 'unpaid' },
     status: { type: String, required: true, enum: ['draft', 'planned', 'in_transit', 'completed', 'cancelled'], default: 'draft' },
     totalCost: { type: Number, default: 0 },
     notes: { type: String, trim: true },
@@ -364,6 +366,55 @@ async function seed() {
     },
   ]);
 
+  const additionalTrips = [];
+  const monthlyCustomers = [customers[0], customers[1], customers[2], customers[3], customers[4]];
+  const monthlyOrigins = ['Ha Noi', 'Bac Ninh', 'Huu Nghi', 'Ha Tinh', 'Tu Son'];
+  const monthlyDestinations = ['Bac Ninh', 'Bang Tuong', 'Lang Son', 'Vinh Phuc', 'Hap Linh'];
+  const monthlyVendors = ['Wonn', 'Wonn', 'Barca', 'Atletico'];
+
+  for (const month of [7, 8, 9]) {
+    for (let index = 0; index < 12; index += 1) {
+      const sequence = String(index + 1).padStart(3, '0');
+      const deliveryDate = new Date(Date.UTC(2026, month - 1, (index % 10) + 1, 8, 0, 0));
+      const status = index % 5 === 0 ? 'planned' : index % 7 === 0 ? 'in_transit' : 'completed';
+      const podStatus = status === 'completed' ? (index % 3 === 0 ? 'received' : 'uploaded') : 'pending';
+      const costStatus = status === 'completed' ? (index % 4 === 0 ? 'pending' : 'approved') : 'pending';
+      const totalCost = status === 'completed' ? 1200000 + (index * 175000) : 0;
+      const vehicle = vehicles[index % vehicles.length];
+      const driver = drivers[index % drivers.length];
+      const customer = monthlyCustomers[index % monthlyCustomers.length];
+
+      additionalTrips.push({
+        tripCode: `TRIP-2026${String(month).padStart(2, '0')}${sequence}`,
+        refCode: `REF26${String(month).padStart(2, '0')}${sequence}`,
+        sales: ['ADMIN', 'CB7', 'S'][index % 3],
+        cutoffMonth: month,
+        month,
+        deliveryDate,
+        origin: monthlyOrigins[index % monthlyOrigins.length],
+        destination: monthlyDestinations[index % monthlyDestinations.length],
+        vehicleId: vehicle._id,
+        vehiclePlate: vehicle.plateNumber,
+        driverId: driver._id,
+        driverName: driver.fullName,
+        customerId: customer._id,
+        customerName: customer.name,
+        vendor: monthlyVendors[index % monthlyVendors.length],
+        truckType: vehicle.model,
+        podStatus,
+        costStatus,
+        oilInvoiceStatus: index % 2 === 0 ? 'has' : 'no',
+        paymentStatus: index % 3 === 0 ? 'paid' : 'unpaid',
+        status,
+        totalCost,
+        notes: `Sample data ${month}/2026`,
+      });
+    }
+  }
+
+  const generatedTrips = await Trip.insertMany(additionalTrips);
+  trips.push(...generatedTrips);
+
   await Cost.insertMany([
     {
       tripCode: trips[0].tripCode,
@@ -441,6 +492,26 @@ async function seed() {
     },
   ]);
 
+  await Cost.insertMany(generatedTrips.map((trip, index) => ({
+    tripCode: trip.tripCode,
+    startKm: 200000 + (index * 125),
+    endKm: 200350 + (index * 125),
+    totalKm: 350,
+    fuelLiters: 42 + (index % 8),
+    fuelUnitPrice: 24000,
+    fuelInvoiceAmount: (42 + (index % 8)) * 24000,
+    fuelTotal: (42 + (index % 8)) * 24000,
+    maintenanceCost: index % 5 === 0 ? 250000 : 0,
+    vetcCost: 85000 + (index % 4) * 25000,
+    loadingFee: index % 3 === 0 ? 50000 : 0,
+    parkingFee: index % 6 === 0 ? 30000 : 0,
+    turnaroundAllowance: index % 4 === 0 ? 100000 : 0,
+    otherFee: index % 7 === 0 ? 75000 : 0,
+    totalCost: trip.totalCost,
+    status: trip.costStatus,
+    note: `Sample cost ${trip.month}/2026`,
+  })));
+
   await Maintenance.insertMany([
     {
       vehiclePlate: vehicles[1].plateNumber,
@@ -477,6 +548,16 @@ async function seed() {
       note: 'Test record for maintenance screen',
     },
   ]);
+
+  await Maintenance.insertMany(generatedTrips.filter((_, index) => index % 3 === 0).map((trip, index) => ({
+    vehiclePlate: trip.vehiclePlate,
+    maintenanceItem: ['Thay dau may', 'Bao duong phanh', 'Kiem tra lop xe'][index % 3],
+    repairDate: trip.deliveryDate,
+    vehicleKm: 200000 + (index * 500),
+    garage: index % 2 === 0 ? 'Garage Bac Ninh' : 'Garage Tan Viet',
+    cost: 450000 + (index * 85000),
+    note: `Sample maintenance ${trip.month}/2026`,
+  })));
 
   const fileRecords = await FileRecord.insertMany([
     {
@@ -569,6 +650,12 @@ async function seed() {
       fileId: String(fileByName.get('doc-registration-002.pdf')?._id),
     },
   ]);
+
+  await DocumentRecord.insertMany(generatedTrips.filter((_, index) => index % 2 === 0).map((trip, index) => ({
+    vehiclePlate: trip.vehiclePlate,
+    type: ['registration', 'insurance', 'inspection', 'permit'][index % 4],
+    expiryDate: new Date(`2026-${String(8 + (index % 5)).padStart(2, '0')}-${String(5 + (index % 20)).padStart(2, '0')}T00:00:00.000Z`),
+  })));
 
   await Approval.insertMany([
     {

@@ -6,6 +6,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PartialType } from '@nestjs/mapped-types';
 import { CrudService } from '../common/mongoose/crud.service';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiPropertyOptional, ApiTags } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
 
 @Schema({ timestamps: true })
 export class Customer {
@@ -57,6 +58,7 @@ export class CustomersService extends CrudService<CustomerDocument> {
 
 @ApiTags('customers')
 @ApiBearerAuth()
+@Roles('admin')
 @Controller('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}

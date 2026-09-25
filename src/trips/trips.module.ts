@@ -10,13 +10,14 @@ import {
   Patch,
   Post,
   Body,
+  Query,
   UploadedFile,
   UseInterceptors,
   Res,
 } from '@nestjs/common';
 import { InjectModel, MongooseModule } from '@nestjs/mongoose';
 import { HydratedDocument, Model } from 'mongoose';
-import { IsDateString, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsIn, IsNumber, IsOptional, IsString } from 'class-validator';
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { PartialType } from '@nestjs/mapped-types';
 import { CrudService } from '../common/mongoose/crud.service';
@@ -53,6 +54,16 @@ export enum TripPodStatus {
   Pending = 'pending',
   Uploaded = 'uploaded',
   Received = 'received',
+}
+
+export enum TripOilInvoiceStatus {
+  Missing = 'no',
+  Present = 'has',
+}
+
+export enum TripPaymentStatus {
+  Unpaid = 'unpaid',
+  Paid = 'paid',
 }
 
 @Schema({ timestamps: true })
@@ -116,6 +127,12 @@ export class Trip {
 
   @Prop({ trim: true, default: TripCostStatus.Pending })
   costStatus!: TripCostStatus;
+
+  @Prop({ trim: true, enum: TripOilInvoiceStatus, default: TripOilInvoiceStatus.Missing })
+  oilInvoiceStatus!: TripOilInvoiceStatus;
+
+  @Prop({ trim: true, enum: TripPaymentStatus, default: TripPaymentStatus.Unpaid })
+  paymentStatus!: TripPaymentStatus;
 
   @Prop({ required: true, enum: TripStatus, default: TripStatus.Draft })
   status!: TripStatus;
@@ -228,6 +245,16 @@ export class CreateTripDto {
   @IsString()
   costStatus?: TripCostStatus;
 
+  @ApiPropertyOptional({ enum: TripOilInvoiceStatus, example: TripOilInvoiceStatus.Present })
+  @IsOptional()
+  @IsEnum(TripOilInvoiceStatus)
+  oilInvoiceStatus?: TripOilInvoiceStatus;
+
+  @ApiPropertyOptional({ enum: TripPaymentStatus, example: TripPaymentStatus.Paid })
+  @IsOptional()
+  @IsEnum(TripPaymentStatus)
+  paymentStatus?: TripPaymentStatus;
+
   @ApiPropertyOptional({ enum: TripStatus, example: TripStatus.Completed })
   @IsOptional()
   @IsString()
@@ -246,6 +273,49 @@ export class CreateTripDto {
 
 export class UpdateTripDto extends PartialType(CreateTripDto) {}
 
+export class TripQueryDto {
+  @ApiPropertyOptional({ example: '2026-06-23' })
+  @IsOptional()
+  @IsDateString()
+  date?: string;
+
+  @ApiPropertyOptional({ example: 6 })
+  @IsOptional()
+  @IsString()
+  month?: string;
+
+  @ApiPropertyOptional({ enum: TripStatus })
+  @IsOptional()
+  @IsEnum(TripStatus)
+  status?: TripStatus;
+
+  @ApiPropertyOptional({ enum: TripPodStatus })
+  @IsOptional()
+  @IsIn(['pending', 'uploaded', 'received', 'has', 'no'])
+  podStatus?: TripPodStatus | 'has' | 'no';
+
+  @ApiPropertyOptional({ enum: TripOilInvoiceStatus })
+  @IsOptional()
+  @IsEnum(TripOilInvoiceStatus)
+  oilInvoiceStatus?: TripOilInvoiceStatus;
+
+  @ApiPropertyOptional({ enum: TripPaymentStatus })
+  @IsOptional()
+  @IsEnum(TripPaymentStatus)
+  paymentStatus?: TripPaymentStatus;
+
+  @ApiPropertyOptional({ example: 'TRIP-2026' })
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+export class UpdateTripPodDto {
+  @ApiProperty({ enum: TripPodStatus })
+  @IsEnum(TripPodStatus)
+  podStatus!: TripPodStatus;
+}
+
 @Injectable()
 export class TripsService extends CrudService<TripDocument> {
   private readonly tripLogger = new Logger(TripsService.name);
@@ -258,6 +328,37 @@ export class TripsService extends CrudService<TripDocument> {
     @InjectRelationModel(Customer.name) private readonly customersModel: Model<Customer>,
   ) {
     super(model, 'Trip');
+  }
+
+  async findTrips(query: TripQueryDto) {
+    const filter: Record<string, unknown> = {};
+    if (query.date) {
+      const start = new Date(query.date);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      filter.deliveryDate = { $gte: start, $lt: end };
+    }
+    if (query.month) {
+      filter.month = Number(query.month);
+    }
+    if (query.status) filter.status = query.status;
+    if (query.podStatus === 'has') filter.podStatus = { $in: [TripPodStatus.Uploaded, TripPodStatus.Received] };
+    else if (query.podStatus === 'no') filter.podStatus = TripPodStatus.Pending;
+    else if (query.podStatus) filter.podStatus = query.podStatus;
+    if (query.oilInvoiceStatus) filter.oilInvoiceStatus = query.oilInvoiceStatus;
+    if (query.paymentStatus) filter.paymentStatus = query.paymentStatus;
+    if (query.search?.trim()) {
+      const expression = new RegExp(query.search.trim(), 'i');
+      filter.$or = [
+        { tripCode: expression },
+        { refCode: expression },
+        { vehiclePlate: expression },
+        { driverName: expression },
+        { customerName: expression },
+      ];
+    }
+
+    return this.model.find(filter).sort({ deliveryDate: -1, createdAt: -1 }).exec();
   }
 
   async createTrip(dto: CreateTripDto) {
@@ -284,6 +385,8 @@ export class TripsService extends CrudService<TripDocument> {
         truckType: dto.truckType,
         podStatus: dto.podStatus ?? TripPodStatus.Pending,
         costStatus: dto.costStatus ?? TripCostStatus.Pending,
+        oilInvoiceStatus: dto.oilInvoiceStatus ?? TripOilInvoiceStatus.Missing,
+        paymentStatus: dto.paymentStatus ?? TripPaymentStatus.Unpaid,
         status: dto.status ?? TripStatus.Draft,
         totalCost: dto.totalCost ?? 0,
         notes: dto.notes,
@@ -321,10 +424,16 @@ export class TripsService extends CrudService<TripDocument> {
       truckType: dto.truckType,
       podStatus: dto.podStatus,
       costStatus: dto.costStatus,
+      oilInvoiceStatus: dto.oilInvoiceStatus,
+      paymentStatus: dto.paymentStatus,
       status: dto.status,
       totalCost: dto.totalCost,
       notes: dto.notes,
     } as Partial<TripDocument>);
+  }
+
+  async updatePod(id: string, dto: UpdateTripPodDto) {
+    return this.update(id, { podStatus: dto.podStatus } as Partial<TripDocument>);
   }
 
   async importTrips(buffer: Buffer): Promise<TripImportResult> {
@@ -421,8 +530,19 @@ export class TripsController {
 
   @Get()
   @ApiOperation({ summary: 'List trips' })
-  findAll() {
-    return this.tripsService.findAll();
+  findAll(@Query() query: TripQueryDto) {
+    return this.tripsService.findTrips(query);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: 'Export trips to Excel' })
+  async exportTrips(@Res({ passthrough: true }) response: Response) {
+    const buffer = await this.tripsService.exportTrips();
+    const exportSize = (buffer as any)?.length ?? (buffer as any)?.byteLength ?? 0;
+    this.tripsService['tripLogger'].log(`Trip export ready (${exportSize} bytes)`);
+    response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    response.setHeader('Content-Disposition', 'attachment; filename="trips.xlsx"');
+    return buffer as unknown as Buffer;
   }
 
   @Get(':id')
@@ -441,6 +561,12 @@ export class TripsController {
   @ApiOperation({ summary: 'Update trip' })
   update(@Param('id') id: string, @Body() dto: UpdateTripDto) {
     return this.tripsService.updateTrip(id, dto);
+  }
+
+  @Patch(':id/pod')
+  @ApiOperation({ summary: 'Update trip POD status' })
+  updatePod(@Param('id') id: string, @Body() dto: UpdateTripPodDto) {
+    return this.tripsService.updatePod(id, dto);
   }
 
   @Delete(':id')
@@ -477,16 +603,6 @@ export class TripsController {
     return this.tripsService.importTrips(file.buffer);
   }
 
-  @Get('export')
-  @ApiOperation({ summary: 'Export trips to Excel' })
-  async exportTrips(@Res({ passthrough: true }) response: Response) {
-    const buffer = await this.tripsService.exportTrips();
-    const exportSize = (buffer as any)?.length ?? (buffer as any)?.byteLength ?? 0;
-    this.tripsService['tripLogger'].log(`Trip export ready (${exportSize} bytes)`);
-    response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    response.setHeader('Content-Disposition', 'attachment; filename="trips.xlsx"');
-    return buffer as unknown as Buffer;
-  }
 }
 
 @Module({

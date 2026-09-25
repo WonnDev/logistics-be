@@ -37,6 +37,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (!user.isActive) {
+      this.logger.warn(`Login failed: inactive user ${dto.username}`);
+      throw new UnauthorizedException('User account is inactive');
+    }
+
     const passwordHash = user.passwordHash;
     if (!passwordHash) {
       this.logger.warn(`Login failed: missing password hash for ${dto.username}`);
